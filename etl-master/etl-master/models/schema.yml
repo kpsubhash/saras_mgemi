@@ -1,0 +1,604 @@
+version: 2
+
+sources:
+  - name: shopify
+    tables:
+      - name: raw_shopify_webhook_customers
+      - name: raw_shopify_webhook_orders
+      - name: raw_shopify_webhook_line_items
+      - name: raw_shopify_webhook_refunds
+      - name: raw_shopify_webhook_refund_line_items
+      - name: raw_shopify_webhook_address
+      - name: raw_shopify_webhook_shipping_lines
+      - name: raw_shopify_webhook_order_transactions
+      - name: raw_shopify_webhook_fulfillments
+      - name: raw_shopify_webhook_gift_cards
+      - name: raw_shopify_webhook_location
+      - name: raw_shopify_webhook_tax_lines
+      - name: raw_shopify_fulfillment_events_webhook
+      - name: raw_flow_order
+      - name: raw_shopify_webhook_products
+      - name: raw_shopify_webhook_product_variants
+      - name: raw_skubana_orders
+      - name: site_event
+
+
+  - name: public
+    tables:
+      - name: raw_attentive_urls
+      - name: raw_ga_traffic
+      - name: raw_ga_traffic_with_events
+      - name: raw_quiet_returns
+      - name: raw_demandware_ocapi_order
+      - name: dim_product_skus
+      - name: dim_product_variants
+      - name: shopify_variant_ids
+      - name: shopify_pos_devices
+      - name: dim_locations
+      - name: order_locations
+      - name: raw_dor_data
+      - name: raw_quiet_po_receipt
+      - name: ft_purchase_orders
+      - name: ft_inventory_history
+      - name: raw_sales_order_items
+      - name: raw_sales_orders
+      - name: raw_event_order_line_items
+      - name: raw_event_orders
+      - name: remote_mgemi_product_variants
+      - name: remote_mgemi_product_vendors
+      - name: remote_mgemi_products
+      - name: raw_quiet_inventory_summary
+      - name: raw_iterable_users
+      - name: raw_klaviyo_timeline_events
+      - name: loop_return_status
+      - name: raw_master_edition
+      - name: sku_rosetta_stone
+
+
+  - name: datascience
+    tables:
+      - name: dim_master_variant
+      - name: dim_weekly_drop
+      - name: dim_master_events
+
+
+  - name: loop
+    tables:
+      - name: raw_loop_webhook_line_items
+      - name: raw_loop_webhook_return_events
+
+
+  - name: analytics
+    tables:
+      - name: tf_ft_demandware_order_payments
+      - name: tf_ft_event_order_line_items_returns
+      - name: tf_ft_event_order_line_items_sales
+      - name: tf_ft_jaggedpeak_discounts
+      - name: tf_ft_master_orders_recent
+
+models:
+    - name: sst_master_orders_analytics
+      description: "{{ doc('doc_sst_master_orders_analytics') }}"
+      columns:
+          - name: line_item_id
+            description: This is a line item id provided by shopify. Not available on historical data (Source <> Shopify)
+            tests:
+                - unique
+
+          - name: source
+            description: This explains where the order came into the system from eg Shopify JaggedPeak PredictSpring Sqaure etc
+            tests:
+                - not_null
+
+          - name: unit_price
+            description: This field is meant to be the price of each line item.
+
+         #- name: revenue_gross
+         #   description: This field should be used for calculating gross revenue (revenue after discounts). This can also be removed (we have properly calc'd gross rev already)
+
+          # - name: revenue_merchandise
+            # description: Used to calculate gross_revenue for Square orders. I can remove it out of this table in the future
+
+          - name: gross_merchandise
+            description: Use this field for gross merchandise value (notice how it adds revenue_gross and discounts)
+
+          - name: revenue_tax
+            description: Tax revenue
+
+          # - name: revenue_discount
+          #   description: This discount field was only relevant for Square and now defaults to null on Shopify data. This can be removed from this table
+
+          # - name: remote_discount
+          #   description: This is where discounts are used
+
+          - name: gross_revenue
+            description: This is "revenue net of discounts" a.k.a Gross Revenue proper
+
+          - name: gross_merchandise
+            description: This take gross revenue (revenue net of discounts) and adds discount back in
+
+          - name: total_order_payments
+            description: Addition of all payments methods we split out from order_payments_flat fields that were joined into the tf_master_orders_union table
+
+          - name: external_oms_id
+            description: On old orders this is a JaggedPeak ID, but on Shopify (refer to source field to know) orders it will now appear as an internal shopify order id
+
+          - name: storefront_order_id
+            description: On old orders this is a JaggedPeak ID, but on Shopify (refer to source field to know) orders it will now appear as a shopify order number / order name. This is the order name/number that is customer-facing.
+
+          - name: sales_order_quantity
+            description: Order Quantity - number of items sold.
+
+          - name: origin_order_id
+            description: for pre-Shopify exchange information this field was used for some exchange linking logic and always defaulted to the same as the actual external_oms_id (jp order id)
+
+          - name: original_order_id
+            description: for pre-Shopify exchange information this field was used for some exchange linking logic and would take on the jaggedpeak id (external_oms_id) of the original order/ line item.
+
+          - name: order_type
+            description: for pre-Shopify exchange and order information. This field took three output values regular_order, first_order_in_exchange, subsequent_order_in_exchange. Regular Order indicated it did not have any part in an exchange. first_order_in_exchange meant it was the originating order, subsequent_order_in_exchange meant it waas an exchange order.
+
+          - name: shopnow_credit_amount
+            description: This is a payment field populated by the "loop-discount" amount from tf_shop_now_loop_discount_credits join. When a person is doing shopnow they get this credit used isntead of a refund.
+
+          - name: stripe_amount
+            description: This is a payment field populated by loop data. If I do a shopnow flow but end up buying more than my original purchase amount (handled by the "loop discount") then I pay the remainder with a card via Stripe within the flow.
+
+          - name: rma_exchange_order_line_id
+            description: Field used for exchange data from pre-Shopify
+
+          - name: originating_line_unit_price
+            description: Field used for exchange data from pre-Shopify. For exchange orders, this gave the original order''s unit price. Used to do calculations relevant for financial reporting.
+
+          - name: originating_revenue_tax
+            description: Field used for exchange data from pre-Shopify. For exchange orders, this gave the original order''s revenue tax. Used to do calculations relevant for financial reporting.
+
+          - name: originating_revenue_shipping
+            description: Field used for exchange data from pre-Shopify. For exchange orders, this gave the original order''s shipping revenue. Used to do calculations relevant for financial reporting.
+
+          - name: originating_shipping_tax
+            description: Field used for exchange data from pre-Shopify. For exchange orders, this gave the original order''s shipping tax. Used to do calculations relevant for financial reporting.
+
+          - name: originating_remote_discount
+            description: Field used for exchange data from pre-Shopify. For exchange orders, this gave the original order''s discount. Used to do calculations relevant for financial reporting.
+
+          - name: exch_flow_id
+            description: Field used for exchange data from pre-Shopify. This was meant to make it possible to group orders in the same exchange flow together. Not sure if it is depreciated.
+
+          - name: fulfillment_location_name
+            description: Where the order was FULFILLED
+
+          - name: fulfillment_location_type
+            description: Where the order was FULFILLED - Store vs Warehouse
+
+          - name: order_location_name
+            description: Where the order was PLACED - Store vs Warehouse (Digital)
+
+          - name: order_location_type
+            description: Where the order was PLACED - Store vs Warehouse (Digital)
+
+          - name: is_shopnow_order
+            description: boolean, is it a show now order or not
+
+          - name: discount_titles
+            description: STRING_AGG of shopify discount titles and pre-shopify campaign ids across the order or line. Reason its different things depending on OMS is that they don''t have totally compatable catagories of information on discounts
+
+          - name: discount_descriptions
+            description: STRING_AGG of shopify discount descriptions and pre-shopify promotion ids across the order or line. Reason its different things depending on OMS is that they don''t have totally compatable catagories of information on discounts
+
+          - name: discount_codes
+            description: STRING_AGG of discount codes across the order or line
+
+
+    - name: tf_master_orders_analytics
+      description: This table basically just acts as an intermediary step - a CTE - just some more transformations and business logic around payment calculations and ship date (for financial reporting).
+
+    - name: sst_attentive_urls
+      description: de-duped list of URLs pulled from Attentive
+
+    - name: sst_customer_segmentation
+      description: A customer segmentation table based on sst_master_orders_analytics
+      columns:
+        - name: billing_email
+          tests:
+            - unique
+
+    - name: sst_user_order_summary
+      description: A weekly user summary of past orders and status as of that week
+      columns:
+        - name: email
+        - name: date_week
+        - name: is_current_week
+        - name: lifetime_orders
+        - name: lifetime_items
+        - name: first_order_date
+        - name: latest_order_date
+        - name: days_since_last_order
+        - name: days_since_last_order_before
+        - name: first_order_discount
+        - name: order_this_week
+
+
+    - name: tf_master_orders_union
+      description: Union of old ft_master_order and shopify data happeans here. CTE is used to also introduce some other calculations here
+
+    - name: tf_raw_demandware_discounts
+      description: Old raw demandware data transformed to extract discount information
+
+    - name: tf_shopify_locations
+      description: Location data from shopify and some simple transforms (eg locaton_type)
+
+    - name: tf_order_linkage
+      description: A table that simples says whether or not an order had a subsequent Shop Now order. This is an order level table.
+
+    - name: tf_master_orders_shopify
+      description: This is a line level table which emulates tf_ft_master_orders but with shopify + loop webhook data which is massaged into the right form. This table feeds into tf_master_orders_union
+      columns:
+
+        - name: order_id
+          description:  This is the internally facing shopify order id (not the one a customer will see - but the one you would see in shopify admin's url if you were looking at the order's page)
+
+        - name: line_item_id
+          description: shopify's line item id (line item could have quantity > 1)
+
+        - name: source
+          description: Important for when we union with old data - source in this case is hardcoded to Shopify, older data can take values like PredictSpring, Square, JaggedPeak
+
+        - name: unit_price
+          description: price of the item as it was sold (could be marked down price)
+
+        - name: revenue_gross
+          description: the revenue after discount (prorated) we collected from the sale of this item
+
+        - name: revenue_merchandise
+          description: this is only relevant for old square data - legacy, ignore
+
+        - name: revenue_tax
+          description: revenue from taxes
+
+        - name: revenue_discount
+          description: this is only relevant for old square data - legacy, ignore
+
+        - name: remote_discount
+          description: discount amount
+
+        - name: revenue_net
+          description: not used
+
+        - name: revenue_shipping
+          description: shipping revenue prorated on the line level based on line revenue
+
+        - name: internal_oms_id
+          description: legacy, unused
+
+        - name: external_oms_id
+          description: in this case the same as order_id but in older data contains the JP order id (our old Order Management System)
+
+        - name: internal_shopify_order_id
+          description: same as order_id column - This is the internally facing shopify order id (not the one a customer will see - but the one you would see in shopify admin's url if you were looking at the order's page)
+
+        - name: order_date
+          description: This is the date that an order was placed
+
+        - name: order_status
+          description: status of order, not commonly used
+
+        - name: notes
+          description: misc. hand-written notes put on order - used for additional context in some cases
+
+        - name: ship_date
+          description: date the first line item was shipped - used by finance in particular for Financial Reporting
+
+        - name: type_
+          description: legacy, ignore
+
+        - name: created_by
+          description: legacy, ignore
+
+        - name: location_id
+          description: replaced by order_location_id and fulfillment_id which now give better context into this important distinction ("was this order cash and carry or in store and fulfilled via warehouse?")
+
+        - name: sales_order_sku
+          description: what is the sku of this line item that was sold?
+
+        - name: sales_order_quantity
+          description: how many items were sold of this sku (nearly always 1)
+
+        - name: properties
+          description: Used for pulling out more payment information (which wallet did they use)
+
+        - name: sales_order_quantity_sum_by_order
+          description: how many items (NOT line items) were sold in this order (potentially over multiple line items)
+
+        - name: line_item_count_by_order
+          description: how many line items are in this order?
+
+        - name: origin_order_id
+          description: this is a legacy field which pointed back to an exchange order's originating order but it makes sense to give it the shopify internal order id as a value
+
+        - name: billing_email
+          description: email associated with the order
+
+        - name: return_order_id
+          description: legacy not used
+
+        - name: return_order_created
+          description: legacy, not used
+
+        - name: unitprice
+          description: legacy do not use
+
+        - name: event_order_quantity
+          description: legacy do not use
+
+        - name: shipping_tax
+          description: tax on shipping revenue (for shipping upsells eg next day air)
+
+        - name: orderstatus_name
+          description: legacy, not used
+
+        - name: receipt_date
+          description: The time a which the warehouse received a returned item. The coalesce amongst the two receipt dates is due to having to deal with dirty warehouse data using at least two different order ids (hence the multiple joins as well)
+
+        - name: return_order_number
+          description: return order number associated with a return - not used regularly
+
+        - name: product_status
+          description: will show "damaged" if item was returned in a damaged state and can't be sold
+
+        - name: return_quantity
+          description: how many items returned (almost always 1 -> can be more than 1 if line item had sales_order_quantity > 1, however). Weird logic is for the same reasons as described in receipt_date col description
+
+        - name: event_return_quantity
+          description: legacy do not use
+
+        - name: dw_storefront_created_at
+          description: legacy do not use
+
+        - name: amex_amount
+          description: how much of this order was payed via american express? used by financial reporting
+
+        - name: visa_amount
+          description: how much of this order was payed via visa? used by financial reporting
+
+        - name: master_amount
+          description: how much of this order was payed via mastercard? used by financial reporting
+
+        - name: discover_amount
+          description: how much of this order was payed via discover? used by financial reporting
+
+        - name: ea_cc_amount
+          description: how much of this order was payed via other credit card (legacy)? used by financial reporting
+
+        - name: paypal_amount
+          description: how much of this order was payed via paypal? used by financial reporting
+
+        - name: shopify_installment_amount
+          description: how much of this order was payed via shop pay installments? used by financial reporting
+
+        - name: amazonpay_amount
+          description: how much of this order was payed via amazonpay? used by financial reporting
+
+        - name: gc_amount
+          description: how much of this order was payed via giftcard? used by financial reporting
+
+        - name: shopnow_credit_amount
+          description: how much of this order was payed via shopnow credit (meaning, the "loop-discount" "gift cards" generated by loop)? used by financial reporting
+
+        - name: stripe_amount
+          description: how much of this order was payed via stripe (stripe is only used in instances where they are doing a shopnow and are paying more than their "shop now credit" (original payment amount)? used by financial reporting
+
+        - name: klarna_amount
+          description: how much of this order was payed via klarna payments. Used by financial reporting
+
+        - name: gateways
+          description: information on what payment methods were used. Useful for keeping an eye on what payment methods are trending for transactions
+
+
+
+
+
+
+    - name: sst_product_data
+      description: This table maaps products to their attributes using a planner database table for mapping shopify variant ids to planner upcs
+      columns:
+        - name: upc
+          tests:
+            - unique
+            - not_null
+
+    - name: tf_shopify_product_data_current
+      description: Get up to date product variant level data from shopify webhooks
+
+    - name: tf_raw_quiet_returns_grouped
+      description: raw_quiet_returns but on the line level. (Any original order line item can have quantity > 1 which in rare cases could cause problems). In most cases this is effectively exactly the same as raw_quiet_returns.
+
+    - name: tf_shopify_discounts_by_line
+      description: Get line item level discount information - amount, discount codes, etc - using STRING_AGG
+
+    - name: tf_shop_now_loop_discount_credits
+      description: The same structure as tf_shopify_discounts_by_line but ONLY grabs "loop-discount" beacuse this needs to be treated specially for finance's needs. Loop Discount is when the refund on an original item is being used within the Shop Now flow.
+
+    - name: tf_shopify_line_cancel_refunds_grouped
+      description: This table just grabs line level cancellations from shoify refunds. It is used in tf_master_orders_shopify in order to flag and filter out cancelled line items
+
+    - name: tf_shopify_shipping_lines_aggregated
+      description: This is an aggregation of shipping line revenue (pre discount) and carrier at the order level. It is used in tf_master_orders_shopify aforementioned fields
+
+    - name: tf_aggregated_taxes
+      description: Shopify tax data aggregated up to the line level. This is used for tf_master_orders_shopify.
+
+    - name: tf_shopify_fulfillment_line_items
+      description: Line Level fulfillment data (I'm actually not 100% sure if there are weird edge cases that could blow up here eg if I order 100 quantity of one line item...). Joined to tf_master_orders_shopify get ship date among other things
+      columns:
+        - name: line_item_id
+          tests:
+            - unique
+
+    - name: tf_shopify_payments_order_id
+      description: An order level payments table that has each payments method as an amount. This table pulls from two prior tables which seperate the transforms of captures vs auths/sales. Data here is used for finance reporting in looker.
+
+    - name: tf_shopify_payments_auths_and_sales
+      description: This table is just getting CC auth and sales events from shopify so that it can be fed into a transformation that flattens this data for financial reporting downstream in sst_master_orders_analytics
+
+    - name: tf_shopify_payments_order_flat
+      description: This table flattens payment data into a series of columns related to payment on an order by various means and methods. Used downstream for financial reporting. The macro is used to attempt to pre-empt changes in Flow payment methods and keep the code D.R.Y.
+
+    - name: tf_shopify_pos_mapping
+      description: Order location replies on this table for store orders because it maps which device is used to place the order to its actual location. Note that there is a workaround in place to be able to order from a store but fulfill from Quiet via Shopify POS
+
+    - name: tf_shopify_discount_applications
+      description: Shopify discount information which is not aggregatd at the line level (could in theory be multiple things acting on a line). This table is then used to aggregate discounts at the line level in tf_shopify_discounts_by_line and tf_shop_now_loop_discount_credits. We are "manually" creating the pro-rating of the discount by line because we need to adjust for cases where the POS shipping upsell as a line item is being handled differently than we want.
+
+    - name: tf_shopify_order_line_item_discount_allocations
+      description: This table breaks out the json of discounts applied to each line and its index (which will match against the order level discount json array). The first discount in the shopify order discount json data will be indexed as 1 in here.
+
+    - name: sst_shopify_cx_refunds
+      description: Shopify refund data that can't easily be linked back to a line item; misc. refunds that are probably CX related. Used for finance reporting (one of two refund reports).
+
+    - name: sst_shopify_line_refunds
+      description: Shopify refunds that we can catagorize to a line item. This is used as a report for finance, as well as for tables to filter out cancelled line items in tf_master_orders_shopify.
+
+    - name: tf_shopify_fulfillment_in_transit_events
+      description: Just a transform of raw shopify fed fulfillment data
+
+    - name: tf_shopify_shipping_lines
+      description: Pulls shipping lines from shopify raw data, does a couple aliases.
+
+    - name: tf_shopify_fulfillments_current
+      description: Pulls raw shopify fulfillments data but instead of tf_shopify_fulfillment_in_transit_events table - this table grabs the most up to date event regardless of event type = in transit.
+
+    - name: tf_shopify_tax_lines
+      description: Transforms raw shopify tax data
+
+    - name: tf_shopify_jp_id_link
+      description: This table exists because we - for a time - were feeding data both into JaggedPeak and into shopify and Quiet Logistics data (raw_quiet_returns) was using the OMS ids from each system interchangably. Needed this to be able to properly join all return data (hence the multiple joins in tf_master_orders_shopify)
+
+    - name: tf_shopify_payments_order_captures
+      description: This table grabs only capture events from the raw shopify transaction data and manipulates it so it can be used in tf_shopify_order_flat later. We seperate captures (and sales) from auths/sales so that we can properly view the transaction information based on is_current flags.
+
+    - name: tf_shopify_payments_order_auths_and_sales
+      description: This table grabs only capture events from the raw shopify transaction data and manipulates it so it can be used in tf_shopify_order_flat later. We seperate captures (and sales) from auths/sales so that we can properly view the transaction information based on is_current flags.
+
+    - name: tf_shopify_order_discount_applications
+      description: Parsing raw shopify data and json blob related to discount applications. This table only has the order_id. Using WITH ORDINALITY on the join because the list order matters for joining data in tf_shopify_discount_applications down the road.
+
+    - name: tf_shopify_order_line_item_discount_applications
+      description: This shopify discount table DOES contain line item id which tf_shopify_order_discount_applications does not - as well as the discount application index which is related to the ordering within the jsonb in tf_shopify_order_discount_applications.
+
+    - name: tf_shopify_refunds_all
+      description: This table contains refund data transformed using shopify order and refund datam as well as loop data (because we need this for understanding refunds on RETURNS at the line item level)
+
+    - name: tf_shopify_order_transactions
+      description: Transform of raw transaction data from shopify. Used in later order payments tables
+
+    - name: sst_line_level_return_intents
+      description: Return intent and reason information from loop at the line level. Line level requires grouping because I could return two of the same line item (original quantity = 2) and generate two return intents / loop flows. In order to join nicely to sst_master_orders_analytics in looker, I Need to make this line level.
+
+    - name: sst_loop_return_intents
+      description: Unaggregated, unit level return intents from loop
+
+    - name: tf_loop_return_current
+      description: Transform of raw loop event and line level data
+
+    - name: tf_loop_line_item_grouped
+      description: Line item level Loop data used for refunds and analytic reports
+
+    - name: tf_shopify_raw_line_items
+      description: Transform of raw line item data from shopify webhook data
+
+    - name: tf_pos_shipping_upsells
+      description: Shopify POS systems have to charge for "Next Day Shipping" or "2nd Day Shipping" in such a way that it shows up as a line item - which is misleading. We seperate this data out from tf_shopify_raw_line_items in order to manipulate this special case differently.
+
+    - name: tf_shopify_raw_refunds
+      description: Transform of raw refund data from shopify webhook data
+
+    - name: tf_shopify_raw_refund_line_items
+      description: Transform of raw refund data from shopify webhook data
+
+    - name: tf_shopify_orders_current
+      description: Transform of raw shopify order data with a is_current flag filter set so its not using historical events / data. We are also filtering out "Loop Gift Cards" which are essentially store credits for returns (check with Finance about this).
+
+    - name: tf_shopify_loop_return_gift_cards
+      description: Transform of raw shopify order data with a is_current flag filter set so its not using historical events / data. We are also filtering to get ONLY the "orders" for "Loop Gift Cards" which are essentially store credits for returns (check with Finance about this). We don't want these in the Orders table because they dont reflect sales but moreso just financial operations.
+
+    - name: tf_shopify_orders_all
+      description: Transform of all raw shopify order data from webhhoks. Feeds tf_shopify_orders_current and tf_shopify_loop_return_gift_cards
+
+    - name: shopify_created_products
+      description: A seeded table which contains products that are not in the public.shopify_variant_ids table because they were made through shopify and not via Planner so they dont have appropriate UPCs or other product data. This is mainly Gift cards right now (and weird Shopify POS Shipping Upsells)
+
+    - name: sst_dv_daily_flash_report_summaries
+      description: This view is used for a daily email that is sent out. The structure of the table required for looker is a bit odd, thus it needs its own view. This view uses sst_master_orders_analytics.
+
+    - name: tf_iterable_users
+      description: Table with historical Iterable user data. Does not need to be regenerated on a regular basis, since the data is static.
+
+    - name: tf_iterable_user_over_time
+      description: Table which generates week-level sequence of user mailability. This is used in a subsequent table, sst_email_segment_history
+
+    - name: tf_klaviyo_users
+      description: Table with historical Klaviyo user data.
+
+    - name: tf_email_users_union
+      description: Union of tf_iterable_users and tf_klaviyo_users
+
+    - name: sst_file_segmentation_history
+      description: This table gives a week-level history of all iterable users and customers. Allows historical view of email segments
+
+    - name: sst_file_segmentation_latest
+      description: This table gives a week-level history of all iterable users and customers. Allows historical view of email segments
+
+    - name: sst_site_personalization
+      description: Table containing up-to-date information on users which is useful for site personalization
+
+      columns:
+
+        - name: email
+          tests:
+            - unique
+
+    - name: sst_ft_inventory_history
+      description: This replaces an old ETL job and its purpose is to give a history of inventory by sku. Runs every morning (because it needs to properly time against when Quiet Logistics passes data to us and we process into raw_quiet_inventory_summary - changing timing may cause issues) but takes a long time to load.
+
+    - name: sst_ft_inventory_history_week
+      description: The same as sst_ft_inventory_history, but only for the past week
+
+    - name: sst_aged_inventory
+      description: This uses sst_ft_inventory_history and calculates the age of inventory which is used to see how inventory is flowing - what is stagnant, what is moving, etc.
+
+    - name: sst_dor_hourly_traffic
+      description: Transforms DOR vendor store traffic data thats inserted via dor etl job into usable data for looker
+
+    - name: sst_file_segments_aggregated
+      description: Because the sst_file_segmentation_history table is so large it would be hard for Looker to query against in reasonable time, so we made this table to simplify it
+
+    - name: sst_internal_orders
+      description: This table is just like sst_master_orders_analytics but is used to report on Internal Orders, or, orders created internally and with no revenue meaning they are likely marketing/influencer orders or other appeasement orders and not normal sales
+
+    - name: sst_price_history
+      description: This table is used to give us the ability to report on whether an item ordered was ordered on markdown or at full_price
+
+    - name: sst_refund_reporting
+      description: This table attempts to create refund reporting based on Loop and Shopify data for the Finance team. Multiple rows might apply to a single ordered line item in some cases.
+
+    - name: sst_user_sizes
+      description: Summary view on sizes each past customer has ordered. (might not be in use?)
+
+    - name: sst_ga_traffic
+      description: GA traffic with an additional calculated channel field
+
+    - name: sst_ga_traffic_with_events
+      description: GA traffic with events, and an additional calculated channel field
+
+    - name: sst_attentive_events
+      description: transformation of the Attentive events into a single row
+
+    - name: sst_gift_cards_by_order
+      description: one row per order, with all the gift card data
+
+    - name: sst_master_edition
+      description: edition data (including price) for different pvids
+
+    - name: sst_line_item_editions
+      description: edition data for line items
